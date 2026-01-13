@@ -31,6 +31,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.db = Database()
         self.active_timer_widgets: Dict[int, TimerWidget] = {}
+        self.task_sessions: Dict[int, int] = {}  # task_id -> session_id for running tasks
         self.setup_ui()
         self.load_tasks()
         self.load_active_timers()
@@ -42,6 +43,11 @@ class MainWindow(QMainWindow):
         self.autosave_timer = QTimer()
         self.autosave_timer.timeout.connect(self.autosave)
         self.autosave_timer.start(30000)
+        
+        # Update task button displays every second
+        self.display_timer = QTimer()
+        self.display_timer.timeout.connect(self.update_task_button_displays)
+        self.display_timer.start(1000)
         
         # Update reports every minute
         self.report_timer = QTimer()
@@ -221,34 +227,17 @@ class MainWindow(QMainWindow):
         """
         layout = QVBoxLayout(parent)
         
-        # Active timers section
-        active_group = QGroupBox("Active Timers")
-        active_layout = QVBoxLayout()
+        # Tasks section
+        tasks_group = QGroupBox("Tasks - Click to Start/Stop")
+        tasks_layout = QVBoxLayout()
         
-        # Scroll area for active timers
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setMinimumHeight(200)
-        self.active_timers_widget = QWidget()
-        self.active_timers_layout = QVBoxLayout(self.active_timers_widget)
-        self.active_timers_layout.addStretch()
-        scroll.setWidget(self.active_timers_widget)
-        active_layout.addWidget(scroll)
-        
-        # Stop all button
+        # Stop all button at top
         stop_all_button = QPushButton("Stop All Timers")
         stop_all_button.clicked.connect(self.stop_all_timers)
         stop_all_button.setMaximumWidth(150)
-        active_layout.addWidget(stop_all_button)
+        tasks_layout.addWidget(stop_all_button)
         
-        active_group.setLayout(active_layout)
-        layout.addWidget(active_group)
-        
-        # Tasks section
-        tasks_group = QGroupBox("Tasks")
-        tasks_layout = QVBoxLayout()
-        
-        # Grid layout for task buttons (no scroll area)
+        # Grid layout for task buttons
         self.tasks_widget = QWidget()
         self.tasks_grid_layout = QGridLayout(self.tasks_widget)
         self.tasks_grid_layout.setSpacing(8)
@@ -365,57 +354,36 @@ class MainWindow(QMainWindow):
                 continue
             
             # Create button for task
-            button = QPushButton(task.name)
-            button.setMinimumHeight(60)
+            button = QPushButton(f"Start {task.name}")
+            button.setMinimumHeight(80)
             button.setMinimumWidth(150)
-            button.setCheckable(True)
+            button.task_id = task.id  # Store task_id on button
+            button.task_name = task.name  # Store task name
+            button.task_color = task.color  # Store color
             
             # Style button with task color
-            if task.color:
-                button.setStyleSheet(f"""
-                    QPushButton {{
-                        background-color: {task.color};
-                        color: {'white' if self.is_dark_color(task.color) else 'black'};
-                        border: 2px solid {task.color};
-                        border-radius: 5px;
-                        font-size: 11pt;
-                        font-weight: bold;
-                        text-align: center;
-                        padding: 10px;
-                    }}
-                    QPushButton:hover {{
-                        background-color: {task.color};
-                        border: 3px solid #2c3e50;
-                    }}
-                    QPushButton:checked {{
-                        border: 3px solid #2980b9;
-                        background-color: {task.color};
-                    }}
-                """)
-            else:
-                button.setStyleSheet("""
-                    QPushButton {
-                        background-color: #3498db;
-                        color: white;
-                        border: 2px solid #3498db;
-                        border-radius: 5px;
-                        font-size: 11pt;
-                        font-weight: bold;
-                        text-align: center;
-                        padding: 10px;
-                    }
-                    QPushButton:hover {
-                        background-color: #3498db;
-                        border: 3px solid #2c3e50;
-                    }
-                    QPushButton:checked {
-                        border: 3px solid #2980b9;
-                        background-color: #3498db;
-                    }
-                """)
+            text_color = 'white' if self.is_dark_color(task.color or "#3498db") else 'black'
+            button_color = task.color or "#3498db"
             
-            # Connect button click to start timer
-            button.clicked.connect(lambda checked, tid=task.id: self.on_task_button_clicked(tid))
+            button.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {button_color};
+                    color: {text_color};
+                    border: 2px solid {button_color};
+                    border-radius: 5px;
+                    font-size: 11pt;
+                    font-weight: bold;
+                    text-align: center;
+                    padding: 10px;
+                }}
+                QPushButton:hover {{
+                    background-color: {button_color};
+                    border: 3px solid #2c3e50;
+                }}
+            """)
+            
+            # Connect button click to toggle timer
+            button.clicked.connect(lambda checked, tid=task.id: self.toggle_task_timer(tid))
             
             # Add to grid layout
             self.tasks_grid_layout.addWidget(button, row, col)
@@ -442,30 +410,12 @@ class MainWindow(QMainWindow):
         luminance = (0.299 * color.red() + 0.587 * color.green() + 0.114 * color.blue()) / 255
         return luminance < 0.5
     
-    def on_task_button_clicked(self, task_id: int):
-        """Handle task button click to start timer.
-        
-        Args:
-            task_id: Task ID
-        """
-        # Uncheck all other buttons
-        for tid, button in self.task_buttons.items():
-            if tid != task_id:
-                button.setChecked(False)
-        
-        # Update selected task
-        self.selected_task_id = task_id
-        
-        # Start timer for this task
-        self.start_timer_for_task(task_id)
-    
     def load_active_timers(self):
         """Load active timers from database."""
         sessions = self.db.get_active_sessions()
         
         for session_row in sessions:
             session = TimerSession.from_db_row(session_row)
-            self.add_timer_widget(session)
             
             # Check if this is a special timer and set the session ID
             if session.task_name == "Work Day":
@@ -526,6 +476,119 @@ class MainWindow(QMainWindow):
                     }
                 """)
                 self.lunch_button.setEnabled(False)
+            else:
+                # Regular task timer - track it
+                self.task_sessions[session.task_id] = session.id
+    
+    def toggle_task_timer(self, task_id: int):
+        """Toggle timer for a task (start if stopped, stop if running).
+        
+        Args:
+            task_id: Task ID to toggle
+        """
+        if task_id in self.task_sessions:
+            # Timer is running, stop it
+            session_id = self.task_sessions[task_id]
+            self.db.stop_session(session_id)
+            del self.task_sessions[task_id]
+            
+            # Update button text
+            if task_id in self.task_buttons:
+                button = self.task_buttons[task_id]
+                button.setText(f"Start {button.task_name}")
+        else:
+            # Timer is not running, start it
+            session_id = self.db.start_session(task_id)
+            self.task_sessions[task_id] = session_id
+            
+            # Log context switch if other timers are active
+            active_task_ids = [tid for tid in self.task_sessions.keys() if tid != task_id]
+            if active_task_ids:
+                self.db.log_context_switch(active_task_ids[0], task_id)
+            else:
+                self.db.log_context_switch(None, task_id)
+        
+        # Refresh reports
+        self.update_reports()
+    
+    def update_task_button_displays(self):
+        """Update the display of all task buttons showing elapsed time for running timers."""
+        # Update regular task buttons
+        for task_id, button in self.task_buttons.items():
+            if task_id in self.task_sessions:
+                # Task is running - show elapsed time
+                session_id = self.task_sessions[task_id]
+                session_row = self.db.get_session_by_id(session_id)
+                if session_row:
+                    session = TimerSession.from_db_row(session_row)
+                    elapsed = session.get_elapsed_display()
+                    button.setText(f"Stop {button.task_name}\n{elapsed}")
+        
+        # Update Work Day button
+        if self.work_day_session_id is not None:
+            session_row = self.db.get_session_by_id(self.work_day_session_id)
+            if session_row:
+                session = TimerSession.from_db_row(session_row)
+                elapsed = session.get_elapsed_display()
+                self.work_day_button.setText(f"Stop Working\n{elapsed}")
+                self.work_day_button.setStyleSheet("""
+                    QPushButton {
+                        background-color: #e74c3c;
+                        color: white;
+                        font-size: 11pt;
+                        font-weight: bold;
+                        border-radius: 8px;
+                        min-width: 200px;
+                        min-height: 50px;
+                    }
+                    QPushButton:hover {
+                        background-color: #c0392b;
+                    }
+                """)
+        
+        # Update Lunch button
+        if self.lunch_session_id is not None:
+            session_row = self.db.get_session_by_id(self.lunch_session_id)
+            if session_row:
+                session = TimerSession.from_db_row(session_row)
+                elapsed = session.get_elapsed_display()
+                self.lunch_button.setText(f"End Lunch\n{elapsed}")
+                self.lunch_button.setStyleSheet("""
+                    QPushButton {
+                        background-color: #e67e22;
+                        color: white;
+                        font-size: 10pt;
+                        font-weight: bold;
+                        border-radius: 8px;
+                        min-width: 150px;
+                        min-height: 50px;
+                    }
+                    QPushButton:hover {
+                        background-color: #d35400;
+                    }
+                """)
+        
+        # Update Break button
+        if self.break_session_id is not None:
+            session_row = self.db.get_session_by_id(self.break_session_id)
+            if session_row:
+                session = TimerSession.from_db_row(session_row)
+                elapsed = session.get_elapsed_display()
+                self.break_button.setText(f"End Break\n{elapsed}")
+                self.break_button.setStyleSheet("""
+                    QPushButton {
+                        background-color: #e67e22;
+                        color: white;
+                        font-size: 10pt;
+                        font-weight: bold;
+                        border-radius: 8px;
+                        min-width: 150px;
+                        min-height: 50px;
+                    }
+                    QPushButton:hover {
+                        background-color: #d35400;
+                    }
+                """)
     
     def add_task(self):
         """Show dialog to add new task."""
@@ -577,106 +640,10 @@ class MainWindow(QMainWindow):
             self.selected_task_id = None
             self.load_tasks()
     
-    def start_timer_for_task(self, task_id: int):
-        """Start timer for specified task.
-        
-        Args:
-            task_id: Task ID
-        """
-        task_row = self.db.get_task_by_id(task_id)
-        task = Task.from_db_row(task_row)
-        
-        # Check if timer already running for this task
-        for widget in self.active_timer_widgets.values():
-            if widget.task_id == task_id:
-                QMessageBox.information(
-                    self, "Timer Running",
-                    f"A timer is already running for '{task.name}'."
-                )
-                # Uncheck the button
-                if task_id in self.task_buttons:
-                    self.task_buttons[task_id].setChecked(False)
-                return
-        
-        # Log context switch if other timers are active
-        if self.active_timer_widgets:
-            # Get any active task for context switch logging
-            first_widget = next(iter(self.active_timer_widgets.values()))
-            self.db.log_context_switch(first_widget.task_id, task_id)
-        
-        # Start new session
-        session_id = self.db.start_session(task_id)
-        start_time = datetime.now(timezone.utc)
-        
-        session = TimerSession(
-            id=session_id,
-            task_id=task_id,
-            start_time=start_time,
-            task_name=task.name,
-            task_color=task.color
-        )
-        
-        self.add_timer_widget(session)
-    
-    def add_timer_widget(self, session: TimerSession):        # Start new session
-        session_id = self.db.start_session(task_id)
-        start_time = datetime.now(timezone.utc)
-        
-        session = TimerSession(
-            id=session_id,
-            task_id=task_id,
-            start_time=start_time,
-            task_name=task.name,
-            task_color=task.color
-        )
-        
-        self.add_timer_widget(session)
-    
-    def add_timer_widget(self, session: TimerSession):
-        """Add timer widget to active timers display.
-        
-        Args:
-            session: Timer session
-        """
-        widget = TimerWidget(
-            session.id,
-            session.task_id,
-            session.task_name,
-            session.task_color,
-            session.start_time,
-            self
-        )
-        widget.stop_button.clicked.connect(lambda: self.stop_timer(session.id))
-        
-        # Insert before the stretch
-        self.active_timers_layout.insertWidget(
-            self.active_timers_layout.count() - 1,
-            widget
-        )
-        self.active_timer_widgets[session.id] = widget
-    
-    def stop_timer(self, session_id: int):
-        """Stop a timer.
-        
-        Args:
-            session_id: Session ID
-        """
-        if session_id in self.active_timer_widgets:
-            widget = self.active_timer_widgets[session_id]
-            widget.stop()
-            self.db.stop_session(session_id)
-            
-            # Remove widget
-            self.active_timers_layout.removeWidget(widget)
-            widget.deleteLater()
-            del self.active_timer_widgets[session_id]
-            
-            # Update reports
-            self.update_reports()
-    
     def stop_all_timers(self):
         """Stop all running timers."""
-        if not self.active_timer_widgets:
+        if not self.task_sessions:
+            QMessageBox.information(self, "No Timers", "No timers are currently running.")
             return
         
         reply = QMessageBox.question(
@@ -686,12 +653,10 @@ class MainWindow(QMainWindow):
         )
         
         if reply == QMessageBox.StandardButton.Yes:
-            # Copy keys to avoid modification during iteration
-            session_ids = list(self.active_timer_widgets.keys())
-            for session_id in session_ids:
-                # Skip Work Day timer - only stop regular task timers
-                if session_id != self.work_day_session_id:
-                    self.stop_timer(session_id)
+            # Stop all regular task timers
+            task_ids = list(self.task_sessions.keys())
+            for task_id in task_ids:
+                self.toggle_task_timer(task_id)
     
     def update_reports(self):
         """Update daily and weekly reports."""
@@ -1052,47 +1017,17 @@ class MainWindow(QMainWindow):
             # Get or create Work Day session for today (reuses existing if stopped earlier today)
             self.work_day_session_id = self.db.get_or_create_work_day_session_for_today(work_day_task_id)
             
-            # Update button
-            self.work_day_button.setText("Stop Working")
-            self.work_day_button.setStyleSheet("""
-                QPushButton {
-                    background-color: #e74c3c;
-                    color: white;
-                    font-size: 12pt;
-                    font-weight: bold;
-                    border-radius: 8px;
-                    min-width: 200px;
-                    min-height: 50px;
-                }
-                QPushButton:hover {
-                    background-color: #c0392b;
-                }
-            """)
-            
             # Enable Lunch and Break buttons
             self.lunch_button.setEnabled(True)
             self.break_button.setEnabled(True)
-            
-            # Add timer widget
-            session_row = self.db.get_session_by_id(self.work_day_session_id)
-            if session_row:
-                session = TimerSession.from_db_row(session_row)
-                self.add_timer_widget(session)
         else:
             # Stop Work Day timer
             self.db.stop_session(self.work_day_session_id)
             
-            # Remove timer widget
-            if self.work_day_session_id in self.active_timer_widgets:
-                widget = self.active_timer_widgets[self.work_day_session_id]
-                self.active_timers_layout.removeWidget(widget)
-                widget.deleteLater()
-                del self.active_timer_widgets[self.work_day_session_id]
-            
             # Reset session ID
             self.work_day_session_id = None
             
-            # Update button
+            # Update button back to Start state
             self.work_day_button.setText("Start My Day")
             self.work_day_button.setStyleSheet("""
                 QPushButton {
@@ -1109,12 +1044,10 @@ class MainWindow(QMainWindow):
                 }
             """)
             
-            # Stop all timers including Lunch/Break
-            session_ids = list(self.active_timer_widgets.keys())
-            for session_id in session_ids:
-                # Stop all timers except the Work Day timer we just stopped
-                if session_id != self.work_day_session_id:
-                    self.stop_timer(session_id)
+            # Stop all regular task timers
+            task_ids = list(self.task_sessions.keys())
+            for task_id in task_ids:
+                self.toggle_task_timer(task_id)
             
             # Reset Lunch/Break session IDs and buttons
             self.lunch_session_id = None
@@ -1159,10 +1092,9 @@ class MainWindow(QMainWindow):
         """Toggle Lunch timer."""
         if self.lunch_session_id is None:
             # Stop all regular task timers (but NOT Work Day)
-            session_ids = list(self.active_timer_widgets.keys())
-            for session_id in session_ids:
-                if session_id != self.work_day_session_id:
-                    self.stop_timer(session_id)
+            task_ids = list(self.task_sessions.keys())
+            for task_id in task_ids:
+                self.toggle_task_timer(task_id)
             
             # Create or get Lunch task
             tasks = self.db.get_all_tasks()
@@ -1177,46 +1109,16 @@ class MainWindow(QMainWindow):
             # Start timer
             self.lunch_session_id = self.db.start_session(lunch_task_id)
             
-            # Update button
-            self.lunch_button.setText("End Lunch")
-            self.lunch_button.setStyleSheet("""
-                QPushButton {
-                    background-color: #e67e22;
-                    color: white;
-                    font-size: 11pt;
-                    font-weight: bold;
-                    border-radius: 8px;
-                    min-width: 150px;
-                    min-height: 50px;
-                }
-                QPushButton:hover {
-                    background-color: #d35400;
-                }
-            """)
-            
             # Disable Break button
             self.break_button.setEnabled(False)
-            
-            # Add timer widget
-            session_row = self.db.get_session_by_id(self.lunch_session_id)
-            if session_row:
-                session = TimerSession.from_db_row(session_row)
-                self.add_timer_widget(session)
         else:
             # Stop Lunch timer
             self.db.stop_session(self.lunch_session_id)
             
-            # Remove timer widget
-            if self.lunch_session_id in self.active_timer_widgets:
-                widget = self.active_timer_widgets[self.lunch_session_id]
-                self.active_timers_layout.removeWidget(widget)
-                widget.deleteLater()
-                del self.active_timer_widgets[self.lunch_session_id]
-            
             # Reset session ID
             self.lunch_session_id = None
             
-            # Update button
+            # Reset button
             self.lunch_button.setText("Lunch")
             self.lunch_button.setStyleSheet("""
                 QPushButton {
@@ -1240,10 +1142,9 @@ class MainWindow(QMainWindow):
         """Toggle Break timer."""
         if self.break_session_id is None:
             # Stop all regular task timers (but NOT Work Day)
-            session_ids = list(self.active_timer_widgets.keys())
-            for session_id in session_ids:
-                if session_id != self.work_day_session_id:
-                    self.stop_timer(session_id)
+            task_ids = list(self.task_sessions.keys())
+            for task_id in task_ids:
+                self.toggle_task_timer(task_id)
             
             # Create or get Break task
             tasks = self.db.get_all_tasks()
@@ -1258,46 +1159,16 @@ class MainWindow(QMainWindow):
             # Start timer
             self.break_session_id = self.db.start_session(break_task_id)
             
-            # Update button
-            self.break_button.setText("End Break")
-            self.break_button.setStyleSheet("""
-                QPushButton {
-                    background-color: #e67e22;
-                    color: white;
-                    font-size: 11pt;
-                    font-weight: bold;
-                    border-radius: 8px;
-                    min-width: 150px;
-                    min-height: 50px;
-                }
-                QPushButton:hover {
-                    background-color: #d35400;
-                }
-            """)
-            
             # Disable Lunch button
             self.lunch_button.setEnabled(False)
-            
-            # Add timer widget
-            session_row = self.db.get_session_by_id(self.break_session_id)
-            if session_row:
-                session = TimerSession.from_db_row(session_row)
-                self.add_timer_widget(session)
         else:
             # Stop Break timer
             self.db.stop_session(self.break_session_id)
             
-            # Remove timer widget
-            if self.break_session_id in self.active_timer_widgets:
-                widget = self.active_timer_widgets[self.break_session_id]
-                self.active_timers_layout.removeWidget(widget)
-                widget.deleteLater()
-                del self.active_timer_widgets[self.break_session_id]
-            
             # Reset session ID
             self.break_session_id = None
             
-            # Update button
+            # Reset button
             self.break_button.setText("Break")
             self.break_button.setStyleSheet("""
                 QPushButton {
@@ -1323,21 +1194,16 @@ class MainWindow(QMainWindow):
         Args:
             event: Close event
         """
-        if self.active_timer_widgets:
+        if self.task_sessions or self.work_day_session_id or self.lunch_session_id or self.break_session_id:
             reply = QMessageBox.question(
                 self, "Active Timers",
-                "You have active timers running. Do you want to stop them before closing?",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No | QMessageBox.StandardButton.Cancel
+                "You have active timers running. They will continue when you reopen the app.",
+                QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel
             )
             
             if reply == QMessageBox.StandardButton.Cancel:
                 event.ignore()
                 return
-            elif reply == QMessageBox.StandardButton.Yes:
-                # Copy keys to avoid modification during iteration
-                session_ids = list(self.active_timer_widgets.keys())
-                for session_id in session_ids:
-                    self.stop_timer(session_id)
         
         self.db.close()
         event.accept()
