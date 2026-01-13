@@ -255,3 +255,79 @@ def test_task_from_db_row():
     assert task.color == "#ff0000"
     assert task.is_active is True
     conn.close()
+
+
+def test_clear_history_for_date_range(test_db):
+    """Test clearing history for a specific date range."""
+    task_id = test_db.create_task("Test Task", "#ff0000")
+    
+    # Create sessions for different days
+    today = datetime.now(timezone.utc)
+    yesterday = today - timedelta(days=1)
+    last_week = today - timedelta(days=7)
+    
+    # Start and end sessions at different times
+    session_today = test_db.start_session(task_id)
+    test_db.stop_session(session_today)
+    
+    # Create yesterday's session by directly inserting (to simulate past data)
+    conn = test_db._get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        INSERT INTO timer_sessions (task_id, start_time, end_time, duration_seconds)
+        VALUES (?, ?, ?, ?)
+    """, (task_id, yesterday.isoformat(), (yesterday + timedelta(hours=1)).isoformat(), 3600))
+    
+    cursor.execute("""
+        INSERT INTO timer_sessions (task_id, start_time, end_time, duration_seconds)
+        VALUES (?, ?, ?, ?)
+    """, (task_id, last_week.isoformat(), (last_week + timedelta(hours=2)).isoformat(), 7200))
+    conn.commit()
+    
+    # Clear yesterday's sessions
+    start_of_yesterday = yesterday.replace(hour=0, minute=0, second=0, microsecond=0)
+    end_of_yesterday = start_of_yesterday + timedelta(days=1)
+    count = test_db.clear_history_for_date_range(
+        start_of_yesterday.isoformat(),
+        end_of_yesterday.isoformat()
+    )
+    
+    assert count == 1
+    
+    # Verify today's and last week's sessions still exist
+    all_sessions = test_db.get_sessions_for_date_range(
+        last_week.replace(hour=0, minute=0, second=0, microsecond=0).isoformat(),
+        (today + timedelta(days=1)).isoformat()
+    )
+    assert len(all_sessions) == 2  # Today and last week
+
+
+def test_clear_all_history(test_db):
+    """Test clearing all history."""
+    task_id = test_db.create_task("Test Task", "#ff0000")
+    
+    # Create multiple sessions
+    for _ in range(5):
+        session_id = test_db.start_session(task_id)
+        test_db.stop_session(session_id)
+    
+    # Log some context switches
+    test_db.log_context_switch(None, task_id)
+    test_db.log_context_switch(task_id, task_id)
+    
+    # Clear all history
+    count = test_db.clear_all_history()
+    assert count == 5
+    
+    # Verify no sessions remain
+    today = datetime.now(timezone.utc)
+    sessions = test_db.get_sessions_for_date_range(
+        "2000-01-01T00:00:00+00:00",
+        (today + timedelta(days=1)).isoformat()
+    )
+    assert len(sessions) == 0
+    
+    # Verify task still exists (not deleted)
+    task = test_db.get_task_by_id(task_id)
+    assert task is not None
+

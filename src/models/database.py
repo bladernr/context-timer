@@ -405,3 +405,61 @@ class Database:
             VALUES (?, ?)
         """, (key, value))
         conn.commit()
+    
+    # Clear history operations
+    def clear_history_for_date_range(self, start_date: str, end_date: str) -> int:
+        """Clear all sessions and context switches within a date range.
+        
+        Args:
+            start_date: Start date (ISO format)
+            end_date: End date (ISO format)
+            
+        Returns:
+            Number of sessions deleted
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        
+        # Count sessions before deleting
+        cursor.execute("""
+            SELECT COUNT(*) as count FROM timer_sessions
+            WHERE start_time >= ? AND start_time < ?
+        """, (start_date, end_date))
+        count = cursor.fetchone()['count']
+        
+        # Delete context switches first (foreign key references)
+        cursor.execute("""
+            DELETE FROM context_switches
+            WHERE timestamp >= ? AND timestamp < ?
+        """, (start_date, end_date))
+        
+        # Delete sessions
+        cursor.execute("""
+            DELETE FROM timer_sessions
+            WHERE start_time >= ? AND start_time < ?
+        """, (start_date, end_date))
+        
+        conn.commit()
+        return count
+    
+    def clear_all_history(self) -> int:
+        """Clear all sessions and context switches.
+        
+        Returns:
+            Number of sessions deleted
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        
+        # Count sessions before deleting
+        cursor.execute("SELECT COUNT(*) as count FROM timer_sessions")
+        count = cursor.fetchone()['count']
+        
+        # Delete all context switches
+        cursor.execute("DELETE FROM context_switches")
+        
+        # Delete all sessions
+        cursor.execute("DELETE FROM timer_sessions")
+        
+        conn.commit()
+        return count

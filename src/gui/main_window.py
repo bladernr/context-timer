@@ -286,6 +286,11 @@ class MainWindow(QMainWindow):
         header_layout.addWidget(header_label)
         header_layout.addStretch()
         
+        clear_day_button = QPushButton("Clear Today")
+        clear_day_button.clicked.connect(self.clear_today_history)
+        clear_day_button.setStyleSheet("background-color: #e74c3c; color: white;")
+        header_layout.addWidget(clear_day_button)
+        
         export_button = QPushButton("Export to CSV")
         export_button.clicked.connect(self.export_daily_report)
         header_layout.addWidget(export_button)
@@ -315,6 +320,16 @@ class MainWindow(QMainWindow):
         header_label.setFont(font)
         header_layout.addWidget(header_label)
         header_layout.addStretch()
+        
+        clear_week_button = QPushButton("Clear This Week")
+        clear_week_button.clicked.connect(self.clear_week_history)
+        clear_week_button.setStyleSheet("background-color: #e74c3c; color: white;")
+        header_layout.addWidget(clear_week_button)
+        
+        clear_all_button = QPushButton("Clear All History")
+        clear_all_button.clicked.connect(self.clear_all_history)
+        clear_all_button.setStyleSheet("background-color: #c0392b; color: white;")
+        header_layout.addWidget(clear_all_button)
         
         export_button = QPushButton("Export to CSV")
         export_button.clicked.connect(self.export_weekly_report)
@@ -953,6 +968,94 @@ class MainWindow(QMainWindow):
             self, "Export Complete",
             f"Exported {len(session_data)} timer sessions to:\n{filepath}"
         )
+    
+    def clear_today_history(self):
+        """Clear all history for today."""
+        reply = QMessageBox.question(
+            self, "Clear Today's History",
+            "Are you sure you want to delete all timer data for today?\n\n"
+            "This action cannot be undone.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+        
+        if reply == QMessageBox.StandardButton.Yes:
+            start_date, end_date = get_date_range_for_today()
+            count = self.db.clear_history_for_date_range(start_date, end_date)
+            
+            # Stop any running timers for today
+            self.stop_all_timers()
+            
+            # Refresh reports
+            self.update_reports()
+            
+            QMessageBox.information(
+                self, "History Cleared",
+                f"Deleted {count} timer sessions for today."
+            )
+    
+    def clear_week_history(self):
+        """Clear all history for this week."""
+        reply = QMessageBox.question(
+            self, "Clear This Week's History",
+            "Are you sure you want to delete all timer data for this week?\n\n"
+            "This action cannot be undone.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+        
+        if reply == QMessageBox.StandardButton.Yes:
+            start_date, end_date = get_date_range_for_week()
+            count = self.db.clear_history_for_date_range(start_date, end_date)
+            
+            # Stop any running timers
+            self.stop_all_timers()
+            
+            # Refresh reports
+            self.update_reports()
+            
+            QMessageBox.information(
+                self, "History Cleared",
+                f"Deleted {count} timer sessions for this week."
+            )
+    
+    def clear_all_history(self):
+        """Clear all history."""
+        reply = QMessageBox.question(
+            self, "Clear All History",
+            "Are you sure you want to delete ALL timer data?\n\n"
+            "This action cannot be undone and will permanently delete:\n"
+            "• All timer sessions\n"
+            "• All context switches\n"
+            "• All historical reports\n\n"
+            "Your task definitions will be preserved.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+        
+        if reply == QMessageBox.StandardButton.Yes:
+            # Additional confirmation for destructive action
+            confirm = QMessageBox.question(
+                self, "Final Confirmation",
+                "This will permanently delete ALL timer history.\n\n"
+                "Are you absolutely sure?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
+            )
+            
+            if confirm == QMessageBox.StandardButton.Yes:
+                count = self.db.clear_all_history()
+                
+                # Stop any running timers
+                self.stop_all_timers()
+                
+                # Refresh reports
+                self.update_reports()
+                
+                QMessageBox.information(
+                    self, "History Cleared",
+                    f"Deleted all {count} timer sessions."
+                )
     
     def autosave(self):
         """Auto-save timer state."""
