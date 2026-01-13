@@ -14,12 +14,29 @@ A Python desktop application for tracking multiple concurrent task timers, measu
 
 ## Installation
 
-### Requirements
+### Option 1: Snap Package (Recommended)
+
+The easiest way to install Context Timer on Linux:
+
+```bash
+sudo snap install context-timer
+```
+
+Then run:
+```bash
+context-timer
+```
+
+**Note**: The snap is strictly confined for security. Your timer data will be stored in `~/snap/context-timer/current/.local/share/context-timer/`.
+
+### Option 2: From Source
+
+#### Requirements
 
 - Python 3.10 or higher
 - PyQt6
 
-### Setup
+#### Setup
 
 1. Clone the repository:
    ```bash
@@ -113,6 +130,20 @@ Shows summary for the current week (Monday-Sunday):
 
 ```bash
 pytest tests/
+```
+
+### Building a Snap Package
+
+See [snap/README.md](snap/README.md) for detailed instructions on building and publishing the snap.
+
+Quick build:
+```bash
+snapcraft
+```
+
+Install locally:
+```bash
+sudo snap install context-timer_0.1.0_amd64.snap --dangerous
 ```
 
 ### Project Structure
