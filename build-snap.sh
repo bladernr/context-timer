@@ -21,13 +21,36 @@ if [ ! -f "snap/snapcraft.yaml" ]; then
     exit 1
 fi
 
-# Clean previous builds (optional)
+# Clean all build artifacts
 if [ "$1" = "clean" ]; then
-    echo "Cleaning previous builds..."
+    echo "Cleaning all snap build artifacts..."
+    
+    # Clean snapcraft build directories
+    if [ -d "parts" ]; then
+        echo "  Removing parts/..."
+        rm -rf parts/
+    fi
+    if [ -d "prime" ]; then
+        echo "  Removing prime/..."
+        rm -rf prime/
+    fi
+    if [ -d "stage" ]; then
+        echo "  Removing stage/..."
+        rm -rf stage/
+    fi
+    
+    # Remove snap packages
+    if ls *.snap 1> /dev/null 2>&1; then
+        echo "  Removing *.snap files..."
+        rm -f *.snap
+    fi
+    
+    # Clean snapcraft cache
     snapcraft clean
-    rm -f *.snap
-    echo "Clean complete!"
+    
+    echo "Clean complete! Repository reset to pre-build state."
     echo ""
+    exit 0
 fi
 
 # Build the snap
@@ -35,15 +58,15 @@ echo "Building snap..."
 if command -v multipass &> /dev/null; then
     # Multipass is installed - snapcraft will use it automatically
     echo "Using Multipass for clean build environment..."
-    snapcraft
+    snapcraft pack
 elif command -v lxd &> /dev/null; then
     # LXD is available but not Multipass
     echo "Using LXD for clean build environment..."
-    snapcraft --use-lxd
+    snapcraft pack --use-lxd
 else
     # Build directly on host system
     echo "Building directly (no Multipass/LXD found)..."
-    snapcraft
+    snapcraft pack
 fi
 
 echo ""

@@ -45,31 +45,55 @@ This script will automatically detect and use:
 - **LXD** (if installed and Multipass is not) - alternative clean environment  
 - **Direct build** (fallback) - builds on your host system
 
-To clean previous builds before building:
+To clean all snap build artifacts (similar to `cargo clean`):
 ```bash
 ./build-snap.sh clean
 ```
+
+This removes:
+- Build directories (`parts/`, `prime/`, `stage/`)
+- Generated snap packages (`*.snap`)
+- Snapcraft cache
+- Resets the repository to pre-build state
 
 ### Method 2: Using snapcraft directly
 
 Basic build (uses Multipass automatically if installed):
 ```bash
-snapcraft
+snapcraft pack
 ```
 
 This will create a `.snap` file in the current directory (e.g., `context-timer_0.1.0_amd64.snap`).
 
 Building with LXD (if you have LXD but not Multipass):
 ```bash
-snapcraft --use-lxd
+snapcraft pack --use-lxd
 ```
+
+**Note**: The older `snapcraft` command (without `pack`) is deprecated. Always use `snapcraft pack`.
 
 ### Building for multiple architectures
 
 To build for arm64:
 ```bash
-snapcraft --target-arch=arm64
+snapcraft pack --target-arch=arm64
 ```
+
+### Cleaning Build Artifacts
+
+To remove all snap build artifacts and reset to a clean state:
+
+```bash
+./build-snap.sh clean
+```
+
+Or manually:
+```bash
+snapcraft clean
+rm -rf parts/ prime/ stage/ *.snap
+```
+
+This is similar to `cargo clean` in Rust or `make clean` in C projects.
 
 ## Installing the Snap Locally
 
