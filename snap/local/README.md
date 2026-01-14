@@ -45,6 +45,11 @@ This script will automatically detect and use:
 - **LXD** (if installed and Multipass is not) - alternative clean environment  
 - **Direct build** (fallback) - builds on your host system
 
+For help and available commands:
+```bash
+./build-snap.sh --help
+```
+
 To clean all snap build artifacts (similar to `cargo clean`):
 ```bash
 ./build-snap.sh clean

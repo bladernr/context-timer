@@ -3,6 +3,49 @@
 
 set -e
 
+usage() {
+    cat << EOF
+Usage: $(basename "$0") [COMMAND]
+
+Build a snap package for Context Timer.
+
+Commands:
+    (none)          Build the snap package (default action)
+    clean           Remove all snap build artifacts and reset repository
+    -h, --help      Display this help message
+
+Examples:
+    $(basename "$0")            # Build the snap
+    $(basename "$0") clean      # Clean all build artifacts
+
+The build process will automatically detect and use:
+  - Multipass (preferred) for isolated clean builds
+  - LXD (alternative) if Multipass is not available
+  - Direct build as fallback
+
+See snap/local/README.md for more detailed information.
+EOF
+    exit 0
+}
+
+# Parse arguments
+case "${1:-}" in
+    -h|--help)
+        usage
+        ;;
+    clean)
+        # Clean command handled below
+        ;;
+    "")
+        # No argument - build (default)
+        ;;
+    *)
+        echo "ERROR: Unknown argument: $1"
+        echo ""
+        usage
+        ;;
+esac
+
 echo "Building Context Timer snap package..."
 echo "========================================"
 echo ""
