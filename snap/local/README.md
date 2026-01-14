@@ -2,31 +2,64 @@
 
 This directory contains the files necessary to build a snap package for Context Timer.
 
+> **Note**: This README is located in `snap/local/` because snapcraft requires that only snapcraft-specific files exist in the `snap/` directory. The `snap/local/` directory is ignored by snapcraft and can contain additional documentation and files.
+
 ## Prerequisites
+
+### Required
 
 Install snapcraft:
 ```bash
 sudo snap install snapcraft --classic
 ```
 
-If building on a non-Linux system or you want a clean build environment, also install LXD:
+### Optional (but recommended)
+
+For clean, isolated builds, install one of the following:
+
+**Option 1: Multipass** (recommended for most users)
+```bash
+sudo snap install multipass
+```
+
+**Option 2: LXD** (alternative to Multipass)
 ```bash
 sudo snap install lxd
 sudo lxd init --auto
 ```
 
+**Note**: The `build-snap.sh` script will automatically detect and use Multipass or LXD if available. If Multipass is installed, snapcraft will use it automatically without any additional flags. LXD requires the `--use-lxd` flag. Direct builds without either may leave build artifacts in your project directory.
+
 ## Building the Snap
+
+### Method 1: Using the build script (recommended)
 
 From the root of the project:
 
+```bash
+./build-snap.sh
+```
+
+This script will automatically detect and use:
+- **Multipass** (if installed) - preferred, clean isolated environment
+- **LXD** (if installed and Multipass is not) - alternative clean environment  
+- **Direct build** (fallback) - builds on your host system
+
+To clean previous builds before building:
+```bash
+./build-snap.sh clean
+```
+
+### Method 2: Using snapcraft directly
+
+Basic build (uses Multipass automatically if installed):
 ```bash
 snapcraft
 ```
 
 This will create a `.snap` file in the current directory (e.g., `context-timer_0.1.0_amd64.snap`).
 
-### Building with LXD (recommended for clean builds)
-
+Building with LXD (if you have LXD but not Multipass):
 ```bash
 snapcraft --use-lxd
 ```
@@ -97,6 +130,17 @@ When installed as a snap, the application stores data in:
 ```
 
 ## Troubleshooting
+
+### Build hangs or prompts for LXD installation
+
+If `build-snap.sh` hangs or prompts to install LXD when you have Multipass installed:
+- Make sure Multipass is running: `multipass version`
+- The script should automatically detect and use Multipass
+- If issues persist, try building directly with `snapcraft` which auto-detects Multipass
+
+### Non-snapcraft files in snap/ directory warning
+
+If you see warnings about non-snapcraft files in the `snap/` directory, ensure all documentation and extra files are in `snap/local/` (which is ignored by snapcraft).
 
 ### Qt platform plugin not found
 

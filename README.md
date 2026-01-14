@@ -134,7 +134,7 @@ pytest tests/
 
 ### Building a Snap Package
 
-See [snap/README.md](snap/README.md) for detailed instructions on building and publishing the snap.
+See [snap/local/README.md](snap/local/README.md) for detailed instructions on building and publishing the snap.
 
 Quick build:
 ```bash

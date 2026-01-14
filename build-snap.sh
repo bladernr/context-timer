@@ -32,11 +32,17 @@ fi
 
 # Build the snap
 echo "Building snap..."
-if command -v multipass &> /dev/null || command -v lxd &> /dev/null; then
-    # Use clean build environment if available
-    snapcraft --use-lxd 2>/dev/null || snapcraft
+if command -v multipass &> /dev/null; then
+    # Multipass is installed - snapcraft will use it automatically
+    echo "Using Multipass for clean build environment..."
+    snapcraft
+elif command -v lxd &> /dev/null; then
+    # LXD is available but not Multipass
+    echo "Using LXD for clean build environment..."
+    snapcraft --use-lxd
 else
-    # Build directly
+    # Build directly on host system
+    echo "Building directly (no Multipass/LXD found)..."
     snapcraft
 fi
 
